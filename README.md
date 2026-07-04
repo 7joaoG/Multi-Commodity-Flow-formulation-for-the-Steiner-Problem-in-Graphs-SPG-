@@ -36,9 +36,10 @@ $\sum_{(i,j) \in A} f^k_{ij} - \sum_{(j,i) \in A} f^k_{ji} =
 \end{cases}$
 
 **Restrições de Acoplamento** (fluxo só pode passar por arestas ativas):
-$$
-f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},
-$$
+
+$f^k_{ij} \le y_e \quad \forall (i,j) \in A$ , $\$ ; $\forall k \in T \setminus \{r\}$
+
+
 onde $e$ é a aresta original correspondente ao arco $(i,j)$.
 ---
 
