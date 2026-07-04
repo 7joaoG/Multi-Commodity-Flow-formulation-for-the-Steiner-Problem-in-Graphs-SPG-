@@ -25,24 +25,18 @@ A formulação utilizada é a **versão direcionada (dSP)** do artigo, que trans
 - $f^k_{ij} \in [0,1]$ – fluxo da mercadoria $k$ no arco $(i,j)$.
 
 **Função Objetivo:**
-$$
-\min \sum_{e \in E} c_e \, y_e
-$$
+$\min \sum_{e \in E} c_e \, y_e$
 
 **Restrições de Conservação de Fluxo** (para cada mercadoria $k$ e cada vértice $i$):
-$$
-\sum_{(i,j) \in A} f^k_{ij} - \sum_{(j,i) \in A} f^k_{ji} =
+$\sum_{(i,j) \in A} f^k_{ij} - \sum_{(j,i) \in A} f^k_{ji} =
 \begin{cases}
 1, & \text{se } i = r,\\
 -1, & \text{se } i = k,\\
 0, & \text{caso contrário}.
-\end{cases}
-$$
+\end{cases}$
 
 **Restrições de Acoplamento** (fluxo só pode passar por arestas ativas):
-$$
-f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},
-$$
+$f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},$
 onde $e$ é a aresta original correspondente ao arco $(i,j)$.
 ---
 
