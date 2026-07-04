@@ -44,9 +44,6 @@ $$
 f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},
 $$
 onde $e$ é a aresta original correspondente ao arco $(i,j)$.
-
-Esta formulação é exata e garante que a solução ótima corresponda a uma árvore de Steiner, conforme demonstrado no artigo.
-
 ---
 
 ## 3. Metodologia Computacional
