@@ -17,34 +17,36 @@ Este trabalho reproduz a **formulação exata de Fluxo de Múltiplas Mercadorias
 ---
 
 ## 2. Formulação Matemática
-A formulação utilizada é a **versão direcionada (dSP)** do artigo, que transforma cada aresta não‑direcionada \( uv \) em dois arcos antiparalelos \( (u,v) \) e \( (v,u) \), com o mesmo custo \( c_{uv} \). Escolhe‑se uma raiz \( r \in T \) e, para cada terminal \( k \in T \setminus \{r\} \), envia‑se uma unidade de fluxo de \( r \) até \( k \).
+
+A formulação utilizada é a **versão direcionada (dSP)** do artigo, que transforma cada aresta não‑direcionada $uv$ em dois arcos antiparalelos $(u,v)$ e $(v,u)$, com o mesmo custo $c_{uv}$. Escolhe‑se uma raiz $r \in T$ e, para cada terminal $k \in T \setminus \{r\}$, envia‑se uma unidade de fluxo de $r$ até $k$.
 
 **Variáveis:**
-- \( y_e \in \{0,1\} \) – indica se a aresta (original) \( e \) é selecionada na árvore.
-- \( f^k_{ij} \in [0,1] \) – fluxo da mercadoria \( k \) no arco \( (i,j) \).
+- $y_e \in \{0,1\}$ – indica se a aresta (original) $e$ é selecionada na árvore.
+- $f^k_{ij} \in [0,1]$ – fluxo da mercadoria $k$ no arco $(i,j)$.
 
 **Função Objetivo:**
-\[
+$$
 \min \sum_{e \in E} c_e \, y_e
-\]
+$$
 
-**Restrições de Conservação de Fluxo** (para cada mercadoria \( k \) e cada vértice \( i \)):
-\[
+**Restrições de Conservação de Fluxo** (para cada mercadoria $k$ e cada vértice $i$):
+$$
 \sum_{(i,j) \in A} f^k_{ij} - \sum_{(j,i) \in A} f^k_{ji} =
 \begin{cases}
 1, & \text{se } i = r,\\
 -1, & \text{se } i = k,\\
 0, & \text{caso contrário}.
 \end{cases}
-\]
+$$
 
 **Restrições de Acoplamento** (fluxo só pode passar por arestas ativas):
-\[
+$$
 f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},
-\]
-onde \( e \) é a aresta original correspondente ao arco \( (i,j) \).
+$$
+onde $e$ é a aresta original correspondente ao arco $(i,j)$.
 
 Esta formulação é exata e garante que a solução ótima corresponda a uma árvore de Steiner, conforme demonstrado no artigo.
+
 
 ---
 
