@@ -1,0 +1,7 @@
+# Ignorar arquivos HTML e XML
+*.html
+*.xml
+
+# Opcional: ignorar pastas inteiras que contenham esses arquivos
+**/*.html
+**/*.xml

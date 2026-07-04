@@ -1,0 +1,808 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<codebase>
+  <file path=".gitignore">
+    <content>
+      <![CDATA[[ARQUIVO BINÁRIO OU NÃO TEXTO - CONTEÚDO OMITIDO]]]>
+    </content>
+  </file>
+  <file path="exec_and_validation.py">
+    <content>
+      <![CDATA[import os
+import sys
+import time
+import multiprocessing
+from mip import Model, xsum, minimize, BINARY, CONTINUOUS, OptimizationStatus
+from imports_and_parser import ler_steinlib
+from modeling import construir_e_resolver
+
+
+INSTANCIAS_SELECIONADAS = {
+    "Incidence W/huge_graphs": [
+        "i320-001.stp",
+        "i320-003.stp",
+        "i320-005.stp",
+    ],
+    "Incidence W/medium_graphs": [
+        "i160-001.stp",
+        "i160-003.stp",
+    ],
+    "Incidence W/little_graphs": [
+        "i080-001.stp",
+    ],
+    "Random W/medium_graphs": [
+        "b01.stp",
+        "b05.stp",
+        "b09.stp",
+        "b16.stp",
+    ],
+    "Random W/little_graphs": [
+        "design432.stp",
+        "w23c23.stp",
+    ]
+}
+
+# Se você tiver valores ótimos conhecidos para comparação, preencha abaixo.
+# Caso contrário, a coluna "Lit." será omitida.
+VALORES_OTIMOS = {
+    # Exemplo: "i320-001.stp": 1234.0,
+}
+
+def get_optimal_threads():
+    """Detecta o número ideal de threads com base no hardware."""
+    total_cpus = multiprocessing.cpu_count()
+    if total_cpus >= 12:
+        return int(total_cpus * 0.7)   # ~8 threads para seu i5-1334U
+    elif total_cpus >= 8:
+        return int(total_cpus * 0.6)
+    else:
+        return max(1, total_cpus - 1)
+
+def executar_instancia(caminho):
+    """Executa o modelo MCF para uma instância e retorna um dicionário com resultados."""
+    try:
+        n, arestas, terminais = ler_steinlib(caminho)
+    except Exception as e:
+        return {"erro": f"Falha na leitura: {e}"}
+
+    if not terminais:
+        return {"erro": "Sem terminais"}
+    if not arestas:
+        return {"erro": "Sem arestas"}
+
+    try:
+        mdl, inicio = construir_e_resolver(n, arestas, terminais)
+        mdl.threads = get_optimal_threads()
+        status = mdl.optimize()
+        tempo = time.perf_counter() - inicio
+
+        if status == OptimizationStatus.OPTIMAL:
+            return {
+                "n": n,
+                "arestas": len(arestas),
+                "terminais": len(terminais),
+                "status": "Ótimo",
+                "valor": mdl.objective_value,
+                "tempo": tempo,
+                "threads": mdl.threads
+            }
+        elif status == OptimizationStatus.FEASIBLE:
+            return {
+                "n": n,
+                "arestas": len(arestas),
+                "terminais": len(terminais),
+                "status": "Viável",
+                "valor": mdl.objective_value,
+                "tempo": tempo,
+                "threads": mdl.threads
+            }
+        else:
+            return {
+                "n": n,
+                "arestas": len(arestas),
+                "terminais": len(terminais),
+                "status": "Não resolvido",
+                "valor": None,
+                "tempo": tempo,
+                "threads": mdl.threads
+            }
+    except Exception as e:
+        return {"erro": f"Erro na otimização: {str(e)}"}
+
+# =============================================================================
+# EXECUÇÃO PRINCIPAL
+# =============================================================================
+if __name__ == "__main__":
+    base_dir = "Data"
+
+    print("=" * 110)
+    print(" PROBLEMA DE STEINER EM GRAFOS (SPG) – FORMULAÇÃO MCF")
+    print(" Baseado em: Koch, T. & Martin, A. (1998).")
+    print(" Solving Steiner Tree Problems in Graphs to Optimality.")
+    print("=" * 110)
+
+    print("\nConfiguração da execução:")
+    print(f"  - Instâncias selecionadas: {sum(len(v) for v in INSTANCIAS_SELECIONADAS.values())}")
+    print(f"  - Threads utilizadas: {get_optimal_threads()}")
+    print(f"  - Solver: CBC (Coin-or Branch and Cut)")
+    print("-" * 110)
+
+    # Cabeçalho da tabela de resultados
+    print(f"\n{'Instância':<30} | {'Categoria':<18} | {'Nós':<5} | {'Arestas':<7} | {'Term.':<5} | {'Status':<12} | {'Valor':<10} | {'Tempo (s)':<10}")
+    print("-" * 125)
+
+    resultados = []
+    total_instancias = 0
+
+    for pasta_relativa, arquivos in INSTANCIAS_SELECIONADAS.items():
+        pasta = os.path.join(base_dir, pasta_relativa)
+        categoria = pasta_relativa.split('/')[-1]   # ex: huge_graphs
+        tipo = pasta_relativa.split('/')[0]         # ex: Incidence W
+
+        for nome_arquivo in arquivos:
+            caminho = os.path.join(pasta, nome_arquivo)
+            total_instancias += 1
+
+            if not os.path.exists(caminho):
+                print(f"{nome_arquivo:<30} | {categoria:<18} | {'N/A':<5} | {'N/A':<7} | {'N/A':<5} | {'Arq. não encontrado':<12} | {'-':<10} | {'-':<10}")
+                continue
+
+            print(f"Processando: {nome_arquivo}...", end='', flush=True)
+            resultado = executar_instancia(caminho)
+
+            if "erro" in resultado:
+                print(" FALHA")
+                print(f"{nome_arquivo:<30} | {categoria:<18} | {'-':<5} | {'-':<7} | {'-':<5} | {resultado['erro'][:12]:<12} | {'-':<10} | {'-':<10}")
+                continue
+
+            print(f" OK ({resultado['tempo']:.2f}s)")
+
+            valor_str = f"{resultado['valor']:.1f}" if resultado['valor'] is not None else "-"
+            print(f"{nome_arquivo:<30} | {categoria:<18} | {resultado['n']:<5} | {resultado['arestas']:<7} | {resultado['terminais']:<5} | {resultado['status']:<12} | {valor_str:<10} | {resultado['tempo']:<10.4f}")
+            resultados.append(resultado)
+
+    # =========================================================================
+    # ESTATÍSTICAS FINAIS
+    # =========================================================================
+    print("\n" + "=" * 110)
+    print("RESUMO ESTATÍSTICO")
+    print("=" * 110)
+
+    if resultados:
+        sucessos = [r for r in resultados if r['status'] == 'Ótimo']
+        viaveis = [r for r in resultados if r['status'] == 'Viável']
+        falhas = [r for r in resultados if r['status'] == 'Não resolvido']
+
+        print(f"\nTotal de instâncias processadas: {len(resultados)}")
+        print(f"  - Ótimas: {len(sucessos)}")
+        print(f"  - Viáveis: {len(viaveis)}")
+        print(f"  - Não resolvidas: {len(falhas)}")
+
+        if sucessos:
+            tempos = [r['tempo'] for r in sucessos]
+            print(f"\nTempo médio de solução (ótimas): {sum(tempos)/len(tempos):.4f} s")
+            print(f"Tempo mínimo: {min(tempos):.4f} s")
+            print(f"Tempo máximo: {max(tempos):.4f} s")
+
+            # Melhor e pior caso (em termos de tempo)
+            melhor = min(sucessos, key=lambda x: x['tempo'])
+            pior = max(sucessos, key=lambda x: x['tempo'])
+            print(f"\nMelhor caso: {melhor['n']} nós, {melhor['arestas']} arestas → {melhor['tempo']:.4f} s")
+            print(f"Pior caso:  {pior['n']} nós, {pior['arestas']} arestas → {pior['tempo']:.4f} s")
+
+    print("\n" + "=" * 110)
+    print("FIM DA EXECUÇÃO – Resultados alinhados com a metodologia de Koch & Martin (1998).")
+    print("=" * 110)]]>
+    </content>
+  </file>
+  <file path="flatten.sh">
+    <content>
+      <![CDATA[#!/bin/bash
+
+# flatten.sh - Gera flattened-codebase.xml com a estrutura e conteúdo do código-fonte
+# Uso: execute no diretório raiz do projeto
+
+OUTPUT_FILE="flattened-codebase.xml"
+
+# Diretórios a serem ignorados (subdiretórios comuns de bibliotecas/build/cache)
+IGNORE_DIRS=(
+    "node_modules"
+    ".git"
+    "dist"
+    "build"
+    ".next"
+    ".nuxt"
+    "__pycache__"
+    ".cache"
+    "coverage"
+    ".vscode"
+    ".idea"
+    "logs"
+    "tmp"
+    "temp"
+)
+
+# Padrões de arquivos a serem ignorados (extensões/binários)
+IGNORE_PATTERNS=(
+    "*.stp"
+    "*.lock"
+    "*.log"
+    "*.bak"
+    "*.png"
+    "*.jpg"
+    "*.jpeg"
+    "*.gif"
+    "*.ico"
+    "*.pdf"
+    "*.zip"
+    "*.tar"
+    "*.gz"
+    "*.exe"
+    "*.dll"
+    "*.so"
+    "*.dylib"
+    "*.bin"
+    "*.pyc"
+    "*.class"
+    "*.o"
+    "*.obj"
+)
+
+# Nome do próprio arquivo de saída (para não incluir ele mesmo)
+OUTPUT_BASENAME=$(basename "$OUTPUT_FILE")
+
+# Função para escapar conteúdo como CDATA (lida com "]]]]><![CDATA[>" interno)
+write_cdata() {
+    local content="$1"
+    # Divide o conteúdo em partes por "]]>" e coloca entre seções CDATA
+    if [[ "$content" == *"]]>"* ]]; then
+        local first="${content%%]]>*}"
+        local rest="${content#*]]>}"
+        printf "<![CDATA[%s]]]]><![CDATA[>%s]]>" "$first" "$rest"
+    else
+        printf "<![CDATA[%s]]>" "$content"
+    fi
+}
+
+# Inicia o arquivo XML
+echo '<?xml version="1.0" encoding="UTF-8"?>' > "$OUTPUT_FILE"
+echo '<codebase>' >> "$OUTPUT_FILE"
+
+# Monta argumentos para o find: exclusão de diretórios
+find_args=()
+for dir in "${IGNORE_DIRS[@]}"; do
+    find_args+=(-not -path "*/$dir/*" -not -path "*/$dir")
+done
+
+# Adiciona exclusão do próprio arquivo de saída
+find_args+=(-not -name "$OUTPUT_BASENAME")
+
+# Adiciona exclusão por padrões de arquivo (usando -not -name)
+for pattern in "${IGNORE_PATTERNS[@]}"; do
+    find_args+=(-not -name "$pattern")
+done
+
+# Encontra todos os arquivos (type f) e processa
+find . -type f "${find_args[@]}" | while IFS= read -r file; do
+    # Remove o "./" do início do caminho
+    rel_path="${file#./}"
+
+    # Verifica se é um arquivo de texto (usando file e grep -I)
+    if file -b --mime-type "$file" | grep -q "^text/"; then
+        is_text=1
+    elif grep -qI '.' "$file" 2>/dev/null; then
+        is_text=1
+    else
+        is_text=0
+    fi
+
+    if [ "$is_text" -eq 1 ]; then
+        # Lê o conteúdo do arquivo
+        content=$(cat "$file" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            content="[ERRO: não foi possível ler o arquivo]"
+        fi
+    else
+        content="[ARQUIVO BINÁRIO OU NÃO TEXTO - CONTEÚDO OMITIDO]"
+    fi
+
+    # Escreve o bloco XML
+    echo "  <file path=\"$rel_path\">" >> "$OUTPUT_FILE"
+    echo "    <content>" >> "$OUTPUT_FILE"
+    printf "      " >> "$OUTPUT_FILE"
+    write_cdata "$content" >> "$OUTPUT_FILE"
+    printf "\n" >> "$OUTPUT_FILE"
+    echo "    </content>" >> "$OUTPUT_FILE"
+    echo "  </file>" >> "$OUTPUT_FILE"
+done
+
+# Finaliza o XML
+echo '</codebase>' >> "$OUTPUT_FILE"
+
+echo "✅ Arquivo gerado: $OUTPUT_FILE"]]>
+    </content>
+  </file>
+  <file path="guide.html">
+    <content>
+      <![CDATA[<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Guia de Entrega: Árvore de Steiner (MCF)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f4f4f9; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; }
+        .step { background: white; padding: 15px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-left: 5px solid #3498db; }
+        .code-block { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 14px; }
+        .report-text { background: #e8f6f3; padding: 15px; border-left: 5px solid #1abc9c; font-style: italic; color: #16a085; }
+        .warning { background: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba; color: #856404; }
+        ul { margin-top: 5px; }
+        li { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 Guia de Entrega: Árvore de Steiner via Fluxo MCF</h1>
+    <p><strong>Prazo:</strong> Amanhã às 23:59 | <strong>Status:</strong> Em progresso</p>
+
+    <div class="warning">
+        <strong>⚠️ Regra de Ouro:</strong> Não tente reinventar a roda. Copie os códigos exatamente como estão abaixo. Foque na execução e na montagem do relatório.
+    </div>
+
+    <!-- FASE 1 -->
+    <h2>Fase 1: Preparação do Ambiente (Tempo estimado: 15 min)</h2>
+    
+    <div class="step">
+        <h3>1.1. Baixar as Instâncias</h3>
+        <p>Acesse <a href="https://steinlib.zib.de/showset.php?SP" target="_blank">SteinLib SP Set</a>. Baixe os arquivos <code>sp01.stp</code> até <code>sp05.stp</code>.</p>
+        <ul>
+            <li>Crie uma pasta chamada <code>steiner_project</code>.</li>
+            <li>Dentro dela, crie uma subpasta <code>instancias</code> e coloque os arquivos lá.</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        <h3>1.2. Configurar Python</h3>
+        <p>Abra seu terminal (WSL ou CMD) na pasta do projeto e execute:</p>
+        <div class="code-block">pip install mip</div>
+        <p>Crie um arquivo chamado <code>main.py</code> na raiz da pasta.</p>
+    </div>
+
+    <!-- FASE 2 -->
+    <h2>Fase 2: O Código Fonte (Tempo estimado: 1h 30 min)</h2>
+    <p>Copie e cole os blocos abaixo sequencialmente no seu <code>main.py</code>.</p>
+
+    <div class="step">
+        <h3>2.1. Imports e Parser</h3>
+        <div class="code-block">
+import os
+import sys
+import time
+from mip import Model, xsum, minimize, BINARY, CONTINUOUS, OptimizationStatus
+
+def ler_steinlib(caminho):
+    with open(caminho, 'r', encoding='utf-8') as f:
+        linhas = f.readlines()
+    n, arestas, terminais, secao = 0, [], [], None
+    for linha in linhas:
+        linha = linha.strip()
+        if not linha or linha.startswith('33D32945'): continue
+        if linha.startswith("SECTION"):
+            secao = linha.split()[1]; continue
+        if linha == "END": continue
+        if secao == "Graph":
+            if linha.startswith("Nodes"): n = int(linha.split()[1])
+            elif len(linha.split()) >= 3 and linha.split()[0].isdigit():
+                partes = linha.split()
+                if partes[0] == 'E': partes = partes[1:]
+                u, v, c = int(partes[0]), int(partes[1]), float(partes[2])
+                arestas.append((u, v, c))
+        elif secao == "Terminals":
+            if linha.startswith("T"):
+                partes = linha.split()
+                if len(partes) >= 2 and partes[1].isdigit(): terminais.append(int(partes[1]))
+    return n, arestas, terminais
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>2.2. Construção do Modelo MIP</h3>
+        <div class="code-block">
+def construir_e_resolver(n, arestas, terminais):
+    inicio = time.perf_counter()
+    mdl = Model(solver_name='HIGHS')
+    mdl.verbose = 0 
+    y = {e: mdl.add_var(var_type=BINARY) for e in arestas}
+    
+    arcos = []
+    for u, v, c in arestas:
+        arcos.append((u, v, (u, v, c)))
+        arcos.append((v, u, (u, v, c)))
+        
+    raiz = terminais[0]
+    mercadorias = [t for t in terminais if t != raiz]
+    f = {}
+    for k in mercadorias:
+        for u, v, e in arcos:
+            f[(u, v, k)] = mdl.add_var(var_type=CONTINUOUS, lb=0, ub=1)
+            
+    for k in mercadorias:
+        for i in range(1, n + 1):
+            saida = xsum(f[(i, j, k)] for i_u, j, e in arcos if i_u == i)
+            entrada = xsum(f[(j, i, k)] for j, i_u, e in arcos if i_u == i)
+            if i == raiz: mdl += saida - entrada == 1
+            elif i == k: mdl += saida - entrada == -1
+            else: mdl += saida - entrada == 0
+            
+    for k in mercadorias:
+        for u, v, e in arcos:
+            mdl += f[(u, v, k)] <= y[e]
+            
+    mdl.objective = minimize(xsum(c * y[(u, v, c)] for u, v, c in arestas))
+    return mdl, inicio
+        </div>
+    </div>
+
+    <div class="step">
+        <h3>2.3. Execução e Validação</h3>
+        <div class="code-block">
+literatura = {"sp01.stp": 9, "sp02.stp": 9, "sp03.stp": 8, "sp04.stp": 11, "sp05.stp": 9}
+print(f"{'Instância':<12} | {'Nós':<5} | {'Arestas':<7} | {'Terminais':<9} | {'Lit.':<6} | {'Encontrado':<10} | {'Tempo (s)':<10}")
+print("-" * 80)
+
+for nome_arquivo in ["sp01.stp", "sp02.stp", "sp03.stp", "sp04.stp", "sp05.stp"]:
+    caminho = os.path.join("instancias", nome_arquivo)
+    if os.path.exists(caminho):
+        n, arestas, terminais = ler_steinlib(caminho)
+        mdl, inicio = construir_e_resolver(n, arestas, terminais)
+        status = mdl.optimize()
+        tempo = time.perf_counter() - inicio
+        opt = mdl.objective_value
+        lit = literatura.get(nome_arquivo, "N/A")
+        print(f"{nome_arquivo:<12} | {n:<5} | {len(arestas):<7} | {len(terminais):<9} | {lit:<6} | {opt:<10.1f} | {tempo:<10.4f}")
+    else:
+        print(f"ERRO: {nome_arquivo} não encontrado.")
+        </div>
+    </div>
+
+    <!-- FASE 3 -->
+    <h2>Fase 3: Montagem do Relatório (Tempo estimado: 2h)</h2>
+    <p>Abra seu editor de texto (Word/LaTeX) e use a estrutura abaixo. Os textos em verde já estão prontos para uso acadêmico.</p>
+
+    <div class="step">
+        <h3>3.1. Estrutura Obrigatória</h3>
+        <ol>
+            <li><strong>Resumo:</strong> Cite o SPG, a formulação MCF e o solver HiGHS.</li>
+            <li><strong>Introdução:</strong> Defina o problema e sua relevância em redes.</li>
+            <li><strong>Formulação Matemática:</strong> Insira as equações de conservação de fluxo e ativação (use o LaTeX do Word).</li>
+            <li><strong>Metodologia:</strong> Cole os textos "[PARA COPIAR NO RELATÓRIO]" das fases anteriores.</li>
+            <li><strong>Resultados:</strong> Cole a tabela gerada pelo código acima.</li>
+            <li><strong>Conclusão:</strong> Valide a reprodutibilidade e mencione o sucesso do HiGHS.</li>
+        </ol>
+    </div>
+
+    <div class="step">
+        <h3>3.2. Texto para a Metodologia (Copie e Cole)</h3>
+        <div class="report-text">
+            "Para a implementação computacional, optou-se pela biblioteca de código aberto python-mip com o solver HiGHS. A escolha justifica-se pela alta performance em problemas de fluxo e pela ausência de custos de licenciamento. O parser desenvolvido mapeia as arestas não-direcionadas da SteinLib em arcos direcionados antiparalelos, permitindo a aplicação direta das restrições de balanço de fluxo para cada mercadoria (terminal)."
+        </div>
+    </div>
+
+    <!-- FASE 4 -->
+    <h2>Fase 4: Checklist Final (Antes das 23:59)</h2>
+    <div class="step">
+        <ul>
+            <li>[ ] O código rodou sem erros e imprimiu a tabela?</li>
+            <li>[ ] Os valores encontrados batem com a coluna "Lit."?</li>
+            <li>[ ] O PDF está formatado (margens, fontes, numeração)?</li>
+            <li>[ ] Você tem a pasta <code>instancias</code> junto com o código?</li>
+        </ul>
+    </div>
+
+</body>
+</html>]]>
+    </content>
+  </file>
+  <file path="imports_and_parser.py">
+    <content>
+      <![CDATA[import os
+import sys
+import re
+import time
+from mip import Model, xsum, minimize, BINARY, CONTINUOUS, OptimizationStatus
+
+def ler_steinlib(caminho):
+    with open(caminho, 'r', encoding='utf-8') as f:
+        linhas = f.readlines()
+
+    n, arestas, terminais, secao = 0, [], [], None
+    contagem_arestas = 0
+    
+    for linha in linhas:
+        linha = linha.strip()
+        
+        # Ignora linhas vazias e comentários
+        if not linha or linha.startswith('33D32945') or linha.startswith('#'):
+            continue
+            
+        if linha.startswith("SECTION"):
+            secao = linha.split()[1] if len(linha.split()) > 1 else None
+            continue
+            
+        if linha == "END":
+            continue
+
+        if secao == "Graph":
+            if linha.startswith("Nodes"):
+                partes = linha.split()
+                if len(partes) >= 2:
+                    n = int(partes[1])
+            elif linha.startswith("Edges"):
+                # Apenas ignora a linha de contagem de arestas
+                continue
+            elif linha.startswith("E"):
+                # Formato: E u v c
+                partes = linha.split()
+                if len(partes) >= 4:  # E + u + v + c
+                    try:
+                        u = int(partes[1])
+                        v = int(partes[2])
+                        c = float(partes[3])
+                        arestas.append((u, v, c))
+                        contagem_arestas += 1
+                    except (ValueError, IndexError):
+                        pass
+            else:
+                # Tenta interpretar como aresta no formato "u v c" (sem E)
+                partes = linha.split()
+                try:
+                    if len(partes) >= 3:
+                        u = int(partes[0])
+                        v = int(partes[1])
+                        c = float(partes[2])
+                        arestas.append((u, v, c))
+                        contagem_arestas += 1
+                    elif len(partes) == 2:
+                        # Formato sem peso, assume peso 1
+                        u = int(partes[0])
+                        v = int(partes[1])
+                        arestas.append((u, v, 1.0))
+                        contagem_arestas += 1
+                except (ValueError, IndexError):
+                    pass
+
+        elif secao == "Terminals":
+            if linha.startswith("T"):
+                partes = linha.split()
+                if len(partes) >= 2:
+                    for p in partes[1:]:
+                        if p.isdigit():
+                            terminais.append(int(p))
+    
+    # Se não encontrou terminais, tenta buscar de forma mais flexível
+    if not terminais:
+        with open(caminho, 'r', encoding='utf-8') as f:
+            conteudo = f.read()
+            # Procura por "Terminals" e números após
+            import re
+            padrao_terminal = re.findall(r'Terminals\s+(\d+)', conteudo)
+            for t in padrao_terminal:
+                terminais.append(int(t))
+            
+            # Se não achou, procura por linhas com T
+            if not terminais:
+                padrao_t = re.findall(r'T\s+(\d+)', conteudo)
+                for t in padrao_t:
+                    terminais.append(int(t))
+    
+    return n, arestas, terminais]]>
+    </content>
+  </file>
+  <file path="inspect_stp.py">
+    <content>
+      <![CDATA[# inspect_stp.py
+import os
+
+def inspecionar_arquivo(caminho):
+    print(f"\n=== INSPECIONANDO: {caminho} ===")
+    with open(caminho, 'r', encoding='utf-8') as f:
+        linhas = f.readlines()
+    
+    # Mostra as primeiras 50 linhas
+    for i, linha in enumerate(linhas[:50]):
+        print(f"{i+1:3d}: {linha.rstrip()}")
+
+# Inspeciona um arquivo de cada pasta
+pastas = [
+    "Data/Incidence W/huge_graphs/i320-001.stp",
+    "Data/Incidence W/medium_graphs/i160-001.stp",
+    "Data/Incidence W/little_graphs/i080-001.stp",
+    "Data/Random W/medium_graphs/b01.stp",
+]
+
+for pasta in pastas:
+    if os.path.exists(pasta):
+        inspecionar_arquivo(pasta)
+    else:
+        print(f"Arquivo não encontrado: {pasta}")]]>
+    </content>
+  </file>
+  <file path="main.py">
+    <content>
+      <![CDATA[from imports_and_parser import *
+from modeling import *
+from exec_and_validation import *]]>
+    </content>
+  </file>
+  <file path="modeling.py">
+    <content>
+      <![CDATA[import time
+from mip import Model, xsum, minimize, BINARY, CONTINUOUS, OptimizationStatus
+
+def construir_e_resolver(n, arestas, terminais):
+    inicio = time.perf_counter()
+    
+    # Usando CBC que é mais estável no Windows
+    mdl = Model(solver_name='CBC')
+    mdl.verbose = 0
+
+    mdl.threads = 8  # Usar múltiplas threads
+
+    # Variáveis y: indica se a aresta é usada na solução
+    y = {}
+    for e in arestas:
+        y[e] = mdl.add_var(var_type=BINARY)
+
+    # Cria arcos bidirecionais para o fluxo
+    arcos = []
+    for u, v, c in arestas:
+        arcos.append((u, v, (u, v, c)))  # (origem, destino, aresta_original)
+        arcos.append((v, u, (u, v, c)))
+
+    raiz = terminais[0]
+    mercadorias = [t for t in terminais if t != raiz]
+
+    # Variáveis de fluxo f[u, v, k]
+    f = {}
+    for k in mercadorias:
+        for u, v, e in arcos:
+            f[(u, v, k)] = mdl.add_var(var_type=CONTINUOUS, lb=0, ub=1)
+
+    # Restrições de conservação de fluxo para cada mercadoria
+    for k in mercadorias:
+        for i in range(1, n + 1):
+            saida = xsum(f[(i, j, k)] for i_u, j, e in arcos if i_u == i)
+            entrada = xsum(f[(j, i, k)] for j, i_u, e in arcos if i_u == i)
+
+            if i == raiz:
+                mdl += saida - entrada == 1
+            elif i == k:
+                mdl += saida - entrada == -1
+            else:
+                mdl += saida - entrada == 0
+
+    # Restrições de acoplamento: fluxo só passa por arestas selecionadas
+    for k in mercadorias:
+        for u, v, e in arcos:
+            mdl += f[(u, v, k)] <= y[e]
+
+    # Função objetivo: minimizar custo total das arestas selecionadas
+    mdl.objective = minimize(
+        xsum(c * y[(u, v, c)] for u, v, c in arestas)
+    )
+
+    return mdl, inicio]]>
+    </content>
+  </file>
+  <file path="README.md">
+    <content>
+      <![CDATA[<div align = "center" >
+  <img src="./img/GraphIMG.png" height="35%" width="35%">
+</div>
+<div align="center">
+  <h1>Steiner Tree via Multi-Commodity Flow (MCF)</h1>
+  <p>Implementação exata da formulação de fluxo para o Problema da Árvore de Steiner em Grafos (SPG)</p>
+  <p><strong>Baseado em:</strong> Koch & Martin (1998) – <em>Solving Steiner Tree Problems in Graphs to Optimality</em></p>
+</div>
+
+---
+
+## 1. Introdução
+O Problema da Árvore de Steiner em Grafos (SPG) consiste em, dado um grafo não‑direcionado \( G = (V, E) \) com pesos \( c_e \ge 0 \) e um conjunto de terminais \( T \subseteq V \), encontrar uma árvore de custo mínimo que conecte todos os terminais. Este problema é NP‑difícil e tem aplicações em redes de telecomunicações, roteamento VLSI e biologia computacional.
+
+Este trabalho reproduz a **formulação exata de Fluxo de Múltiplas Mercadorias (MCF)** proposta por Koch & Martin (1998), utilizando programação linear inteira mista (PLIM) e um solver de código aberto. A implementação segue fielmente a modelagem do artigo, com a substituição do grafo original por um digrafo e a decomposição do fluxo em mercadorias individuais para cada terminal.
+
+---
+
+## 2. Formulação Matemática
+A formulação utilizada é a **versão direcionada (dSP)** do artigo, que transforma cada aresta não‑direcionada \( uv \) em dois arcos antiparalelos \( (u,v) \) e \( (v,u) \), com o mesmo custo \( c_{uv} \). Escolhe‑se uma raiz \( r \in T \) e, para cada terminal \( k \in T \setminus \{r\} \), envia‑se uma unidade de fluxo de \( r \) até \( k \).
+
+**Variáveis:**
+- \( y_e \in \{0,1\} \) – indica se a aresta (original) \( e \) é selecionada na árvore.
+- \( f^k_{ij} \in [0,1] \) – fluxo da mercadoria \( k \) no arco \( (i,j) \).
+
+**Função Objetivo:**
+\[
+\min \sum_{e \in E} c_e \, y_e
+\]
+
+**Restrições de Conservação de Fluxo** (para cada mercadoria \( k \) e cada vértice \( i \)):
+\[
+\sum_{(i,j) \in A} f^k_{ij} - \sum_{(j,i) \in A} f^k_{ji} =
+\begin{cases}
+1, & \text{se } i = r,\\
+-1, & \text{se } i = k,\\
+0, & \text{caso contrário}.
+\end{cases}
+\]
+
+**Restrições de Acoplamento** (fluxo só pode passar por arestas ativas):
+\[
+f^k_{ij} \le y_e \quad \forall (i,j) \in A,\; \forall k \in T \setminus \{r\},
+\]
+onde \( e \) é a aresta original correspondente ao arco \( (i,j) \).
+
+Esta formulação é exata e garante que a solução ótima corresponda a uma árvore de Steiner, conforme demonstrado no artigo.
+
+---
+
+## 3. Metodologia Computacional
+
+### 3.1. Seleção de Instâncias
+Para reproduzir os experimentos, utilizou‑se um **subconjunto representativo** das instâncias disponíveis na **SteinLib**, seguindo a mesma lógica de diversificação adotada por Koch & Martin nos testes VLSI. Foram selecionadas instâncias de diferentes portes (50, 80, 160 e 320 vértices) e estruturas (*Incidence W* e *Random W*), totalizando **12 instâncias**. Isso permite avaliar a escalabilidade do modelo sem comprometer o tempo total de execução.
+
+### 3.2. Ambiente Computacional
+| Componente          | Especificação                                 |
+|---------------------|-----------------------------------------------|
+| **Processador**     | Intel Core i5‑1334U (10 núcleos, 12 threads)  |
+| **Memória RAM**     | 16,0 GB                                       |
+| **Sistema Operacional** | Windows 11 (64 bits)                       |
+| **Linguagem**       | Python 3.13                                   |
+| **Solver**          | CBC (Coin‑or Branch and Cut), via `python‑mip`|
+| **Threads**         | 8 (configuração automática)                   |
+
+### 3.3. Implementação
+O código foi desenvolvido em Python utilizando a biblioteca `python‑mip`, que fornece uma interface unificada para solvers de PLIM. A formulação MCF foi implementada com:
+- Variáveis binárias para as arestas.
+- Variáveis contínuas para os fluxos.
+- Restrições de conservação e acoplamento geradas dinamicamente.
+- Nenhuma heurística ou pré‑processamento adicional – o modelo é resolvido **exatamente** como descrito na seção 2.
+
+---
+
+## 4. Resultados
+A tabela abaixo apresenta os valores ótimos obtidos e os tempos de CPU (em segundos) para as instâncias selecionadas. *b16.stp* ainda está em execução (atualizar assim que concluído).
+
+| Instância       | Categoria       | Vértices | Arestas | Terminais | Status  | Valor Ótimo | Tempo (s) |
+|-----------------|-----------------|---------:|--------:|----------:|---------|------------:|----------:|
+| i320‑001.stp   | huge_graphs     | 320      | 480     | 9         | Ótimo   | 2672        | 34.97     |
+| i320‑003.stp   | huge_graphs     | 320      | 480     | 9         | Ótimo   | 2972        | 265.98    |
+| i320‑005.stp   | huge_graphs     | 320      | 480     | 9         | Ótimo   | 2991        | 651.62    |
+| i160‑001.stp   | medium_graphs   | 160      | 240     | 8         | Ótimo   | 2490        | 17.61     |
+| i160‑003.stp   | medium_graphs   | 160      | 240     | 8         | Ótimo   | 2297        | 6.09      |
+| i080‑001.stp   | little_graphs   | 80       | 120     | 7         | Ótimo   | 1787        | 3.93      |
+| b01.stp        | medium_graphs   | 50       | 63      | 10        | Ótimo   | 87          | 0.24      |
+| b05.stp        | medium_graphs   | 50       | 100     | 14        | Ótimo   | 61          | 6.56      |
+| b09.stp        | medium_graphs   | 75       | 94      | 39        | Ótimo   | 220         | 15.27     |
+| b16.stp        | medium_graphs   | 50       | ?       | ?         | *exec.* | –           | –         |
+| design432.stp  | little_graphs   | ?        | ?       | ?         | *pendente* | –         | –         |
+| w23c23.stp     | little_graphs   | ?        | ?       | ?         | *pendente* | –         | –         |
+
+*Nota: Os valores de arestas e terminais para as últimas instâncias serão complementados após a conclusão da execução.*
+
+---
+
+## 5. Conclusão
+A implementação reproduziu com sucesso a formulação MCF de Koch & Martin (1998), obtendo **soluções ótimas** para todas as instâncias finalizadas até o momento. Os tempos de CPU variam de <1 segundo (b01) a ~11 minutos (i320‑005), evidenciando a escalabilidade do modelo em função do tamanho do grafo e da densidade de terminais.
+
+O uso do solver CBC (em vez do CPLEX original) não comprometeu a reprodutibilidade, pois a formulação e as restrições são idênticas – apenas o motor de otimização difere. Dessa forma, os resultados confirmam a validade do modelo e a consistência dos dados da SteinLib, alinhando‑se com os objetivos do trabalho original.
+
+---
+
+## 6. Como Executar
+1. **Instalar dependências**:
+   ```bash
+   pip install mip[cbc]]]>
+    </content>
+  </file>
+</codebase>
