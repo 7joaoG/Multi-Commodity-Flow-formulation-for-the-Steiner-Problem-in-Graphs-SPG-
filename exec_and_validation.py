@@ -28,7 +28,6 @@ INSTANCIAS_SELECIONADAS = {
     ],
     "Random W/little_graphs": [
         "design432.stp",
-        "w23c23.stp",
     ]
 }
 

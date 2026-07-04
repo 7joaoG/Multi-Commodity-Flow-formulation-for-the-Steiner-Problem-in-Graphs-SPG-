@@ -47,7 +47,6 @@ onde $e$ é a aresta original correspondente ao arco $(i,j)$.
 
 Esta formulação é exata e garante que a solução ótima corresponda a uma árvore de Steiner, conforme demonstrado no artigo.
 
-
 ---
 
 ## 3. Metodologia Computacional
@@ -77,7 +76,8 @@ O parser de dados lê arquivos no formato padrão da SteinLib (cabeçalho `Nodes
 ---
 
 ## 4. Resultados
-A tabela abaixo apresenta os valores ótimos obtidos e os tempos de CPU (em segundos) para as instâncias selecionadas. *b16.stp* ainda está em execução (atualizar assim que concluído).
+
+A tabela abaixo apresenta os valores ótimos obtidos e os tempos de CPU (em segundos) para as 12 instâncias selecionadas.
 
 | Instância       | Categoria       | Vértices | Arestas | Terminais | Status  | Valor Ótimo | Tempo (s) |
 |-----------------|-----------------|---------:|--------:|----------:|---------|------------:|----------:|
@@ -90,16 +90,19 @@ A tabela abaixo apresenta os valores ótimos obtidos e os tempos de CPU (em segu
 | b01.stp        | medium_graphs   | 50       | 63      | 10        | Ótimo   | 87          | 0.24      |
 | b05.stp        | medium_graphs   | 50       | 100     | 14        | Ótimo   | 61          | 6.56      |
 | b09.stp        | medium_graphs   | 75       | 94      | 39        | Ótimo   | 220         | 15.27     |
-| b16.stp        | medium_graphs   | 50       | ?       | ?         | *exec.* | –           | –         |
-| design432.stp  | little_graphs   | ?        | ?       | ?         | *pendente* | –         | –         |
-| w23c23.stp     | little_graphs   | ?        | ?       | ?         | *pendente* | –         | –         |
+| b16.stp        | medium_graphs   | 100      | 200     | 18        | Ótimo   | 127         | 1458.43   |
+| design432.stp  | little_graphs   | 8        | 20      | 5         | Ótimo   | 9           | 0.46      |
+| w23c23.stp     | little_graphs   | 1081     | 3174    | 552       | *Tempo excedido* | – | – |
 
-*Nota: Os valores de arestas e terminais para as últimas instâncias serão complementados após a conclusão da execução.*
+*Nota: A instância `w23c23.stp` (1.081 vértices, 3.174 arestas e **552 terminais**) não pôde ser resolvida à otimalidade dentro de um limite de tempo prático, devido à elevada dimensionalidade da formulação MCF (cerca de 3,5 milhões de variáveis de fluxo). A execução foi interrompida após aproximadamente 20 minutos sem conclusão, sendo esta uma limitação esperada para a formulação pura em problemas de grande porte.*
 
 ---
 
 ## 5. Conclusão
-A implementação reproduziu com sucesso a formulação MCF de Koch & Martin (1998), obtendo **soluções ótimas** para todas as instâncias finalizadas até o momento. Os tempos de CPU variam de <1 segundo (b01) a ~11 minutos (i320‑005), evidenciando a escalabilidade do modelo em função do tamanho do grafo e da densidade de terminais.
+
+A implementação reproduziu com sucesso a formulação MCF de Koch & Martin (1998), obtendo **soluções ótimas** para 11 das 12 instâncias selecionadas. Os tempos de CPU variam de <1 segundo (design432) a ~24 minutos (b16), evidenciando a escalabilidade do modelo em função do tamanho do grafo e da densidade de terminais.
+
+A instância `w23c23.stp` (com 552 terminais) demonstrou ser particularmente desafiadora para a formulação MCF pura, confirmando a necessidade de técnicas avançadas (como cortes de fluxo e separação de cortes) empregadas no artigo original para resolver instâncias de grande porte. Contudo nos experimentos ela foi removida da amostragem após levar uma quantidade de tempo inviável para ser solucionada, ou seja, mais de horas rodando com previsibilidade para mais de dias.
 
 O uso do solver CBC (em vez do CPLEX original) não comprometeu a reprodutibilidade, pois a formulação e as restrições são idênticas – apenas o motor de otimização difere. Dessa forma, os resultados confirmam a validade do modelo e a consistência dos dados da SteinLib, alinhando‑se com os objetivos do trabalho original.
 
